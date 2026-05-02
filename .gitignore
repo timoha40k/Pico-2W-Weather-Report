@@ -1,0 +1,9 @@
+build/
+*.uf2
+*.bin
+*.elf
+*.map
+*.dis
+.DS_Store
+.env
+compile_commands.json
