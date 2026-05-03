@@ -1,5 +1,5 @@
-#ifndef MYSH1106_H
-#define MYSH1106_H
+#ifndef SH1106_H
+#define SH1106_H
 
 #include "fonts.h"
 #include <ctype.h>
@@ -69,15 +69,16 @@
 
 #define SCROLL_OFF 0x2E
 
-
 typedef enum {BLACK, WHITE} Color;
 
-typedef struct{
+typedef struct SH1106{
     uint8_t buffer[OLED_W * OLED_H >> 3];
     uint8_t negative, inverted;
     uint8_t font_spacing, font_height, font_width;
     Color color;
 }SH1106;
+
+static SH1106 oled;
 
 void oled_write_register(uint8_t data){
     uint8_t src[2] = {CMD_REGISTER, data};
@@ -370,7 +371,7 @@ void oled_set_font5x7(SH1106* oled){
     oled->font_width = 5;
 }
 
-SH1106 oled_init(){
+SH1106* oled_init(void){
     oled_write_register(DISPLAY_OFF);
 
     //oled_write_register(SET_VCOM_DESELECT_MODE);
@@ -422,8 +423,6 @@ SH1106 oled_init(){
 
     oled_write_register(DISPLAY_ON);
 
-    SH1106 oled;
-
     oled.color = WHITE;
     oled.negative = 0;
     oled.inverted = 0;
@@ -432,7 +431,7 @@ SH1106 oled_init(){
     oled_fill(BLACK, &oled);
     oled_update_screen(&oled);
 
-    return oled;
+    return &oled;
 }
 
 #endif
