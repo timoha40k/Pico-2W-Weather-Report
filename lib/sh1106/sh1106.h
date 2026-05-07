@@ -95,54 +95,54 @@ void oled_write_register_multi(uint8_t* data, uint16_t count){
     i2c_write_blocking(I2C_MACRO, SH1106_I2C_ADDR, src, count + 1, false);
 }
 
-void oled_update_screen(SH1106* oled){
+void oled_update_screen(){
     for (uint8_t m = 0; m < 8; m++){
         oled_write_register(PAGE_ADDR + m);
         oled_write_register(LOWER_COL_ADDR);
         oled_write_register(HIGHER_COL_ADDR);
 
-        oled_write_register_multi(&oled->buffer[OLED_W*m], OLED_W);
+        oled_write_register_multi(&oled.buffer[OLED_W*m], OLED_W);
     }
 }
 /* Reversing black pixel to colored one and colored one to black and vise verse */
-void oled_negative_screen(SH1106* oled){
-    oled->negative = !oled->negative;
-    if (oled->negative)
+void oled_negative_screen(){
+    oled.negative = !oled.negative;
+    if (oled.negative)
         oled_write_register(SET_NORMAL_DISPLAY);
     else
         oled_write_register(SET_REVERSE_DISPLAY);
 }
 /*Inverts screen vertically. Only vertically */
-void oled_invert_screen(SH1106* oled){
-    oled->inverted = !oled->inverted;
-    if (oled->inverted)
+void oled_invert_screen(){
+    oled.inverted = !oled.inverted;
+    if (oled.inverted)
         oled_write_register(0xC0);
     else
         oled_write_register(0xC8);
 }
 
-void oled_fill(Color color, SH1106* oled){
-    memset(oled->buffer, (color == BLACK) ? 0x00 : 0xFF, sizeof(oled->buffer));
+void oled_fill(Color color){
+    memset(oled.buffer, (color == BLACK) ? 0x00 : 0xFF, sizeof(oled.buffer));
 }
 
-void oled_set_color(Color color, SH1106* oled){
-    oled->color = color;
+void oled_set_color(Color color){
+    oled.color = color;
 }
 
-void oled_draw_pixel(uint8_t x, uint8_t y, SH1106* oled){
-    x = (oled->inverted) ? 127 - x : x;
+void oled_draw_pixel(uint8_t x, uint8_t y){
+    x = (oled.inverted) ? 127 - x : x;
     if (x >= OLED_W || y >= OLED_H)
         return;
     uint16_t pos = x + (y >> 3) * OLED_W; // the same as x + (y / 8) * OLED_W
 
-    if (oled->color == WHITE){
-        oled->buffer[pos] |= 1 << (y & 7); // y & 7 the same as y % 8
+    if (oled.color == WHITE){
+        oled.buffer[pos] |= 1 << (y & 7); // y & 7 the same as y % 8
     } else {
-        oled->buffer[pos] &= ~(1 << (y & 7));
+        oled.buffer[pos] &= ~(1 << (y & 7));
     }
 }
 
-void oled_draw_bitmap(uint8_t x, uint8_t y, uint8_t width, uint8_t height, const uint8_t* bitmap, SH1106* oled){
+void oled_draw_bitmap(uint8_t x, uint8_t y, uint8_t width, uint8_t height, const uint8_t* bitmap){
     uint8_t ch_mask = 0;
     uint16_t size = (width * height + 7) >> 3;
 
@@ -153,7 +153,7 @@ void oled_draw_bitmap(uint8_t x, uint8_t y, uint8_t width, uint8_t height, const
            ch_mask = 0x80 >> j;
 
            if (bitmap[i] & ch_mask)
-               oled_draw_pixel(x, y, oled);
+               oled_draw_pixel(x, y);
            x++;
 
            if ((x - original_x) == width){
@@ -167,54 +167,54 @@ void oled_draw_bitmap(uint8_t x, uint8_t y, uint8_t width, uint8_t height, const
    }
 }
 
-void oled_print_ch(char ch, uint8_t x, uint8_t y, const uint8_t* font, SH1106* oled){
+void oled_print_ch(char ch, uint8_t x, uint8_t y, const uint8_t* font){
     uint8_t ascii_pos = ch - 32;
-    uint8_t font_width = oled->font_width;
+    uint8_t font_width = oled.font_width;
     for (uint8_t col = 0; col < font_width; col++){
-        for (uint8_t row = 0; row < oled->font_height; row++){
+        for (uint8_t row = 0; row < oled.font_height; row++){
             if (font[ascii_pos*font_width + col] & (1 << row)) {
-               oled_draw_pixel(x + col, y + row, oled);
+               oled_draw_pixel(x + col, y + row);
             }
         }
     }
 }
 
-void oled_print_str(const char* str, uint8_t x, uint8_t y, const uint8_t* font, SH1106* oled){
-    uint8_t spacing = oled->font_spacing;
+void oled_print_str(const char* str, uint8_t x, uint8_t y, const uint8_t* font){
+    uint8_t spacing = oled.font_spacing;
     while (*str){
-        oled_print_ch(*str++, x, y, font, oled);
+        oled_print_ch(*str++, x, y, font);
         x += spacing;
     }
 }
 
 /*dig_sep - digits after decimal separation, coma. overal length of float can't exceed 15 digits, otherwise, chage the digit[] array size*/
-void oled_print_float(float val, uint8_t dig_sep, uint8_t x, uint8_t y, const uint8_t* font, SH1106* oled){
+void oled_print_float(float val, uint8_t dig_sep, uint8_t x, uint8_t y, const uint8_t* font){
     char digits[16];
     int int_part = (int)val;
     int float_part = roundf((val - int_part) * powf(10.0f, dig_sep));
     char format[8];
     snprintf(format, 8, "%%d.%%0%dd", dig_sep);
     snprintf(digits, 16, format, int_part, float_part);
-    oled_print_str(digits, x, y, font, oled);
+    oled_print_str(digits, x, y, font);
 }
 /*_digits - used for formatting, pass 1 to just print int */
-void oled_print_int(int val, uint8_t _digits, uint8_t x, uint8_t y, const uint8_t* font, SH1106* oled){
+void oled_print_int(int val, uint8_t _digits, uint8_t x, uint8_t y, const uint8_t* font){
     char digits[16];
     char format[8];
     snprintf(format, 8, "%%0%dd", _digits);
     sniprintf(digits, 16, format, val);
-    oled_print_str(digits, x, y, font, oled);
+    oled_print_str(digits, x, y, font);
 }
 
-void oled_print_str_formating(const char* str, uint8_t x, uint8_t y, const uint8_t* font, SH1106* oled, ...){
+void oled_print_str_formating(const char* str, uint8_t x, uint8_t y, const uint8_t* font, ...){
     va_list arg;
-    va_start(arg, oled);
-    uint8_t spacing = oled->font_spacing;
+    va_start(arg, font);
+    uint8_t spacing = oled.font_spacing;
 
     const char* ptr = str;
     while (*ptr){
         while (*ptr && *ptr != '%'){
-            oled_print_ch(*ptr, x, y, font, oled);
+            oled_print_ch(*ptr, x, y, font);
             x += spacing;
             ptr++;
         }
@@ -232,35 +232,35 @@ void oled_print_str_formating(const char* str, uint8_t x, uint8_t y, const uint8
         if (*ptr == 'i' || *ptr == 'd'
             || *ptr == 'u' || *ptr == 'h') {
             int dig = k > 0 ? atoi(format) : 1;
-            oled_print_int(va_arg(arg, int), dig, x, y, font, oled);
+            oled_print_int(va_arg(arg, int), dig, x, y, font);
             x += dig * spacing;
         }
         else if (*ptr == 'f') {
             int dig_sep = k > 0 ? atoi(format) : 2;
-            oled_print_float(va_arg(arg, double), dig_sep, x, y, font, oled);
+            oled_print_float(va_arg(arg, double), dig_sep, x, y, font);
             snprintf(tmp, sizeof(tmp), "%.*f", dig_sep, 0.0);//measure legth of float
             x += (strlen(tmp)+1) * spacing;
         }
         else if (*ptr == 'c') {
-            oled_print_ch(va_arg(arg, int), x, y, font, oled);
+            oled_print_ch(va_arg(arg, int), x, y, font);
         }
         else if (*ptr == 's') {
             char* s = va_arg(arg, char*);
-            oled_print_str(s, x, y, font, oled);
+            oled_print_str(s, x, y, font);
             x += strlen(s) * spacing;
         } else{
-            oled_print_str(format, x, y, font, oled);
+            oled_print_str(format, x, y, font);
         }
         ptr++;
     }
     /*while (*str){
-        oled_print_ch(*str++, x, y, font, oled);
+        oled_print_ch(*str++, x, y, font);
         x += spacing;
     }*/
     va_end(arg);
 }
 
-void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled){
+void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2){
     //Modified Bresenham’s algorithm
     uint8_t start_x = (x2 < x1) ? x2 : x1;
     uint8_t start_y = (y2 > y1 || x2 > x1) ? y1 : y2;
@@ -276,7 +276,7 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
         slop_error += slop;
 
         while (slop_error >=0){
-            oled_draw_pixel(x, y, oled);
+            oled_draw_pixel(x, y);
             y += y_incr;
             slop_error -= 2*(dx);
         }
@@ -287,7 +287,7 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
             slop_error += slop;
 
             while (slop_error >=0){
-                oled_draw_pixel(x, y, oled);
+                oled_draw_pixel(x, y);
                 y += 1;
                 slop_error -= 2*(dx);
             }
@@ -297,7 +297,7 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
             slop_error += slop;
 
             while (slop_error >=0){
-                oled_draw_pixel(x, y, oled);
+                oled_draw_pixel(x, y);
                 y += 1;
                 slop_error -= 2*(dx);
             }
@@ -308,7 +308,7 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
             slop_error += slop;
 
             while (slop_error >=0){
-                oled_draw_pixel(x, y, oled);
+                oled_draw_pixel(x, y);
                 y -= 1;
                 slop_error -= 2*(dx);
             }
@@ -318,7 +318,7 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
             slop_error += slop;
 
             while (slop_error >=0){
-                oled_draw_pixel(x, y, oled);
+                oled_draw_pixel(x, y);
                 y += 1;
                 slop_error -= 2*(dx);
             }
@@ -327,51 +327,51 @@ void oled_draw_line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, SH1106* oled
 
 }
 
-void oled_draw_hline(uint8_t x, uint8_t y, uint8_t width, SH1106* oled){
+void oled_draw_hline(uint8_t x, uint8_t y, uint8_t width){
     uint8_t end = x + width;
     for(uint8_t cx = x; cx <= end; cx++){
-        oled_draw_pixel(cx, y, oled);
+        oled_draw_pixel(cx, y);
     }
 }
-void oled_draw_vline(uint8_t x, uint8_t y, uint8_t height, SH1106* oled){
+void oled_draw_vline(uint8_t x, uint8_t y, uint8_t height){
     uint8_t end = y + height;
     for(uint8_t cy = y; cy <= end; cy++){
-        oled_draw_pixel(x, cy, oled);
+        oled_draw_pixel(x, cy);
     }
 }
 
-void oled_draw_rect_filled(uint8_t x, uint8_t y, uint8_t width, uint8_t height, SH1106* oled){
+void oled_draw_rect_filled(uint8_t x, uint8_t y, uint8_t width, uint8_t height){
     for (uint8_t ry = y; ry <= y + height; ry ++){
         for (uint8_t rx = x; rx <= x + width; rx++){
-            oled_draw_pixel(rx, ry, oled);
+            oled_draw_pixel(rx, ry);
         }
     }
 }
 
-void oled_draw_rect(uint8_t x, uint8_t y, uint8_t width, uint8_t height, SH1106* oled){
-    /*for (uint8_t rx = x; rx < x + width; rx++) oled_draw_pixel(rx, y, oled);
-    for (uint8_t rx = x; rx < x + width; rx++) oled_draw_pixel(rx, y + height, oled);
-    for (uint8_t ry = y; ry < y + height; ry ++) oled_draw_pixel(x, ry, oled);
-    for (uint8_t ry = y; ry < y + height; ry ++) oled_draw_pixel(x + width, ry, oled);*/
-    oled_draw_hline(x, y, width, oled);
-    oled_draw_hline(x, y + height, width, oled);
-    oled_draw_vline(x, y, height, oled);
-    oled_draw_vline(x + width, y, height, oled);
+void oled_draw_rect(uint8_t x, uint8_t y, uint8_t width, uint8_t height){
+    /*for (uint8_t rx = x; rx < x + width; rx++) oled_draw_pixel(rx, y);
+    for (uint8_t rx = x; rx < x + width; rx++) oled_draw_pixel(rx, y + height);
+    for (uint8_t ry = y; ry < y + height; ry ++) oled_draw_pixel(x, ry);
+    for (uint8_t ry = y; ry < y + height; ry ++) oled_draw_pixel(x + width, ry);*/
+    oled_draw_hline(x, y, width);
+    oled_draw_hline(x, y + height, width);
+    oled_draw_vline(x, y, height);
+    oled_draw_vline(x + width, y, height);
 }
 
-void oled_set_font3x5(SH1106* oled){
-    oled->font_spacing = 4;
-    oled->font_height = 5;
-    oled->font_width = 3;
+void oled_set_font3x5(){
+    oled.font_spacing = 4;
+    oled.font_height = 5;
+    oled.font_width = 3;
 }
 
-void oled_set_font5x7(SH1106* oled){
-    oled->font_spacing = 6;
-    oled->font_height = 7;
-    oled->font_width = 5;
+void oled_set_font5x7(){
+    oled.font_spacing = 6;
+    oled.font_height = 7;
+    oled.font_width = 5;
 }
 
-SH1106* oled_init(void){
+void oled_init(void){
     oled_write_register(DISPLAY_OFF);
 
     //oled_write_register(SET_VCOM_DESELECT_MODE);
@@ -426,12 +426,11 @@ SH1106* oled_init(void){
     oled.color = WHITE;
     oled.negative = 0;
     oled.inverted = 0;
-    oled_set_font5x7(&oled);
+    oled_set_font5x7();
 
-    oled_fill(BLACK, &oled);
-    oled_update_screen(&oled);
+    oled_fill(BLACK);
+    oled_update_screen();
 
-    return &oled;
 }
 
 #endif
