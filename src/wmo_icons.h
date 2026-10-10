@@ -1,6 +1,7 @@
 #ifndef WMO_ICONS_H
 #define WMO_ICONS_H
 #include <stdint.h>
+#include <time.h>
 #define WMO_ICONS_HEIGHT 16
 #define WMO_ICONS_WIDTH 96
 
@@ -36,6 +37,19 @@ uint8_t code_to_sprite(uint8_t wmo_code){
         case 53: return 5;//drizzle
         case 55: return 5;//heavy drizzle
         default: return 4;
+    }
+}
+
+//The size of str must be >= 4 chars
+void get_wday(struct tm* time, char* str){
+    switch (time->tm_wday) {
+        case 0: str = "Mon";
+        case 1: str = "Tue";
+        case 2: str = "Wed";
+        case 3: str = "Thu";
+        case 4: str = "Fri";
+        case 5: str = "Sat";
+        case 6: str = "Sun";
     }
 }
 

@@ -14,13 +14,6 @@ add_subdirectory(lib/sh1106)
 add_subdirectory(lib/network)
 add_subdirectory(lib/json)
 
-target_compile_definitions(main PRIVATE
-        WIFI_SSID=\"$ENV{WIFI_SSID}\"
-        WIFI_PASSWORD=\"$ENV{WIFI_PASSWORD}\"
-        WEATHER_TODAY=\"$ENV{WEATHER_TODAY}\"
-        WEATHER_WEEK=\"$ENV{WEATHER_WEEK}\"
-        )
-
 target_include_directories(main PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}
      )

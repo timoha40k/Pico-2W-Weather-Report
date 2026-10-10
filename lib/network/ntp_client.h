@@ -3,6 +3,8 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#ifndef NTP_H
+#define  NTP_H
 #include <pico/time.h>
 #include <string.h>
 #include <time.h>
@@ -34,8 +36,8 @@ static void ntp_result(NTP_T* state, int status, time_t *result) {
     if (status == 0 && result) {
         time_t local = *result + UTC_OFFSET_SEC;
         *state->time = gmtime(&local);
-        //printf("got ntp response: %02d/%02d/%04d %02d:%02d:%02d\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1900,
-              // utc->tm_hour, utc->tm_min, utc->tm_sec);
+        /*printf("got ntp response: %02d/%02d/%04d %02d:%02d:%02d\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1900,
+              utc->tm_hour, utc->tm_min, utc->tm_sec, ut);*/
         state->done = true;
     } else {
         async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
@@ -174,3 +176,5 @@ void run_ntp_once(struct tm** time) {
 
     free(state);
 }
+
+#endif

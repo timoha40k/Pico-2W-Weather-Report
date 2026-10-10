@@ -6,4 +6,5 @@ build/
 *.dis
 .DS_Store
 .env
+src/definitions.h
 compile_commands.json
