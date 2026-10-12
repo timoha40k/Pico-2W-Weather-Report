@@ -3,4 +3,4 @@ source .env
 set +a
 
 cd build
-make -j4
+make -j10

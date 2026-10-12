@@ -33,5 +33,6 @@ int connect_to_wifi(){
         return 1;
     }
     printf("Connected!\n");
+    return 0;
 }
 #endif

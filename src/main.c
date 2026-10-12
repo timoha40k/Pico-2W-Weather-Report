@@ -1,7 +1,9 @@
+#include <cyw43.h>
+#include <cyw43_ll.h>
+#include <hardware/gpio.h>
 #include <lwip/err.h>
 #include <lwip/ip_addr.h>
 #include <lwip/opt.h>
-#include "lwip/apps/sntp.h"
 #include <pico/platform/panic.h>
 #include <pico/time.h>
 #include <stdbool.h>
@@ -18,26 +20,20 @@
 
 #include "sh1106.h"
 #include "fonts.h"
+#include "src/definitions.h"
 #include "src/oled.h"
 #include "src/network.h"
 #include "wmo_icons.h"
-#include "calendar.h"
 #include "src/weather_cast.h"
+#include "controller.h"
 
-void oled_draw_spritesheet_bitmap(uint8_t x, uint8_t y, uint8_t sprite_width, uint8_t sprite_height,
-   uint8_t spritesheet_width, uint8_t spritesheet_height, uint8_t sprite_num, const uint8_t* spritesheet){
-       uint8_t sheet_cols = spritesheet_width / sprite_width;
-       uint8_t sheet_rows = spritesheet_height / sprite_height;
+#define MICS_IN_SEC 1000000
 
-       uint8_t sprite_col = sprite_num % sheet_cols;
-       uint8_t sprite_row = sprite_num / sheet_cols;
+static time_t base_time = 0;
+static absolute_time_t base_at;
 
-       uint8_t sheet_row_bytes = (spritesheet_width + 7) >> 3;
-       uint8_t sprite_col_bytes = (sprite_col * sprite_width) >> 3;
-        for (uint8_t h = 0; h < sprite_height; h++){
-            uint8_t offset = (sprite_row * sprite_height + h) * sheet_row_bytes + sprite_col_bytes;
-            oled_draw_bitmap(x, y + h, sprite_width, 1, (spritesheet + offset));
-        }
+time_t get_now(){
+    return base_time + absolute_time_diff_us(base_at, get_absolute_time()) / 1000000;
 }
 
 int main(){
@@ -47,11 +43,19 @@ int main(){
 
     rpi_start_oled();
 
+    const uint8_t buttonLeft = BUTTON_LEFT_PIN;
+    const uint8_t buttonRight = BUTTON_RIGHT_PIN;
+    const uint8_t buttonUp = BUTTON_UP_PIN;
+    const uint8_t buttonDown = BUTTON_DOWN_PIN;
+    init_controller();
+
     if (start_network_interface() != 0) {
         return 1;
     }
 
-    connect_to_wifi();
+    if (connect_to_wifi() != 0){
+        return 1;
+    }
     oled_fill(BLACK);
 
     http_response_t server_output = {0};
@@ -68,38 +72,6 @@ int main(){
 
     sleep_ms(100);
 
-    //oled_print_float(64.5f, 6, 18, font3x5, &oled);
-    struct tm* time;
-    run_ntp_once(&time);
-
-    uint8_t hour_now = time->tm_hour;
-    //oled_print_float(25.72, 2, 60, 40, font3x5, &oled);
-    //
-    //calendar
-    draw_time_date(time);
-
-    //drawing boxes
-    for(uint8_t i = 0; i < 4; i++){
-        oled_draw_rect(i*32, 6, 32, 32);
-    }
-
-    oled_draw_vline(127, 6, 32);
-
-    // weather information
-    //oled_draw_bitmap(6, 7, WMO_ICONS_WIDTH, WMO_ICONS_HEIGHT, wmo_icons);
-    /*oled_draw_spritesheet_bitmap(8, 8, 16, 16, WMO_ICONS_WIDTH, WMO_ICONS_HEIGHT, code_to_sprite(wmo_codes[0]), wmo_icons);
-    oled_print_str_formating("%d ~C", 8, 25, font3x5, (int)temperature[hour_now]);
-    oled_print_str_formating("%02d:00", 6, 32, font3x5, hour_now);*/
-
-    uint8_t dt = 0;
-    for (int i = 0; i <= 4; i++){
-        uint8_t hour_next = hour_now + (i * 6);
-
-        dt = (hour_next >= 24) ? 24 : 0;
-        oled_print_str_formating("%d ~C", 8 + (32 * i), 25, font3x5, (int)temperature[hour_next]);
-        oled_print_str_formating("%02d:00", 6 + (32 * i), 32, font3x5, hour_next - dt);
-        oled_draw_spritesheet_bitmap(8 + (32 * i), 8, 16, 16, WMO_ICONS_WIDTH, WMO_ICONS_HEIGHT, code_to_sprite((uint8_t)wmo_codes[hour_next]), wmo_icons);
-    }
 
     get_weather_week(&server_output);
 
@@ -118,16 +90,80 @@ int main(){
     free(min_temp_week);
 
 
-    for (int i = 0; i < 7; i++){
+    /*for (int i = 0; i < 7; i++){
         oled_draw_rect(i*18, 46, 18, 18);
         char temp[5];
         snprintf(temp, sizeof(temp), "%d ~C", (int)avg_temp_week[i]);
         oled_print_str(temp, i*18 + 2, 58, font3x5);
-    }
+        }*/
+
+    time_t out_time;
+    bool tried_sync = !run_ntp_once(&out_time);
+    base_time = out_time;
+    base_at = get_absolute_time();
 
     oled_update_screen();
-    while(1) sleep_ms(2000);
-    //for simplicity sake we'll assume that temperature[i] is temperature at i hour temperture[1] -> 01:00 etc
+    int min_last = -1;
+    while(1) {
+        int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA); // checking if wifi is connected
+        if (status == CYW43_LINK_UP){
+            if (tried_sync && absolute_time_diff_us(base_at, get_absolute_time()) >  5LL * MICS_IN_SEC){
+                printf("retrying to sync time...");
+                if (run_ntp_once(&out_time)){
+                    printf("time synced\n");
+                    base_time = out_time;
+                    base_at = get_absolute_time();
+                }
+            }
+            if (absolute_time_diff_us(base_at, get_absolute_time()) >  30LL * MICS_IN_SEC && !tried_sync){
+                if (run_ntp_once(&out_time)){
+                    printf("time synced\n");
+                    base_time = out_time;
+                    base_at = get_absolute_time();
+                    tried_sync = false;
+                } else {
+                    printf("tried syncing, failed");
+                    tried_sync = true;
+                }
+            }
+        } else {
+            printf("No internet access, will sync later\n");
+        }
+        if (absolute_time_diff_us(base_at, get_absolute_time()) >  5LL * MICS_IN_SEC){
+            time_t time_from_boot = get_now();
+            struct tm t = *gmtime(&time_from_boot);
+
+            if (min_last != t.tm_min){
+                oled_fill(BLACK);
+
+                draw_time_date(&t);
+                draw_weather_today_boxes(t.tm_hour, temperature, wmo_codes);
+
+            }
+
+            min_last = t.tm_min;
+        }
+        enum Button button = read_controller();
+        if (button != NO_PRESS){
+            oled_set_color(BLACK);
+            oled_draw_rect_filled(0, 39, OLED_W, 65-49);
+            oled_set_color(WHITE);
+            if (button == LEFT){
+                oled_draw_rect_filled(0, 39, 16, 16);
+            }
+            if (button == UP){
+                oled_draw_rect_filled(31, 39, 16, 16);
+            }
+            if (button == DOWN){
+                oled_draw_rect_filled(62, 39, 16, 16);
+            }
+            if (button == RIGHT){
+                oled_draw_rect_filled(93, 39, 16, 16);
+            }
+        }
+        oled_update_screen();
+        sleep_ms(100);
+    }
 
     cyw43_arch_deinit();
 

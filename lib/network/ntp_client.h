@@ -20,7 +20,7 @@ typedef struct NTP_T_ {
     struct udp_pcb *ntp_pcb;
     async_at_time_worker_t request_worker;
     async_at_time_worker_t resend_worker;
-    struct tm** time;
+    time_t* out;
     bool done;
 } NTP_T;
 
@@ -35,13 +35,13 @@ typedef struct NTP_T_ {
 static void ntp_result(NTP_T* state, int status, time_t *result) {
     if (status == 0 && result) {
         time_t local = *result + UTC_OFFSET_SEC;
-        *state->time = gmtime(&local);
+        *state->out = local;
         /*printf("got ntp response: %02d/%02d/%04d %02d:%02d:%02d\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1900,
               utc->tm_hour, utc->tm_min, utc->tm_sec, ut);*/
         state->done = true;
     } else {
         async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
-        hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(),  &state->request_worker, NTP_TEST_TIME_MS)); // repeat the request in future
+        //hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(),  &state->request_worker, NTP_TEST_TIME_MS)); // repeat the request in future
         printf("Failed to get time, retry in %ds\n", NTP_TEST_TIME_MS / 1000);
     }
 }
@@ -100,7 +100,7 @@ static void ntp_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_ad
 // Called to make a NTP request
 static void request_worker_fn(__unused async_context_t *context, async_at_time_worker_t *worker) {
     NTP_T* state = (NTP_T*)worker->user_data;
-    //hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &state->resend_worker, NTP_RESEND_TIME_MS)); // in case UDP request is lost
+    hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &state->resend_worker, NTP_RESEND_TIME_MS)); // in case UDP request is lost
     int err = dns_gethostbyname(NTP_SERVER, &state->ntp_server_address, ntp_dns_found, state);
     if (err == ERR_OK) {
         ntp_request(state); // Cached DNS result, make NTP request
@@ -118,7 +118,7 @@ static void resend_worker_fn(__unused async_context_t *context, async_at_time_wo
 }
 
 // Perform initialisation
-static NTP_T* ntp_init(struct tm** time) {
+static NTP_T* ntp_init(time_t* out) {
     NTP_T *state = (NTP_T*)calloc(1, sizeof(NTP_T));
     if (!state) {
         printf("failed to allocate state\n");
@@ -135,7 +135,7 @@ static NTP_T* ntp_init(struct tm** time) {
     state->request_worker.user_data = state;
     state->resend_worker.do_work = resend_worker_fn;
     state->resend_worker.user_data = state;
-    state->time = time;
+    state->out = out;
     return state;
 }
 
@@ -167,14 +167,24 @@ static NTP_T* ntp_init(struct tm** time) {
     }
     free(state);
 }*/
-void run_ntp_once(struct tm** time) {
-    NTP_T *state = ntp_init(time);
-    if (!state) return;
+bool run_ntp_once(time_t* out) {
+    NTP_T *state = ntp_init(out);
+    if (!state) return false;
 
     hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &state->request_worker, 0));
     while (!state->done) sleep_ms(100);
 
+    async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->request_worker);
+    async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
+
+    cyw43_arch_lwip_begin();
+    udp_remove(state->ntp_pcb);
+    cyw43_arch_lwip_end();
+
+    bool ok = state->done;
     free(state);
+
+    return ok;
 }
 
 #endif
