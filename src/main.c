@@ -107,15 +107,16 @@ int main(){
     while(1) {
         int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA); // checking if wifi is connected
         if (status == CYW43_LINK_UP){
-            if (tried_sync && absolute_time_diff_us(base_at, get_absolute_time()) >  5LL * MICS_IN_SEC){
+            if (tried_sync && absolute_time_diff_us(base_at, get_absolute_time()) >  30LL * MICS_IN_SEC){
                 printf("retrying to sync time...");
                 if (run_ntp_once(&out_time)){
                     printf("time synced\n");
                     base_time = out_time;
                     base_at = get_absolute_time();
+                    tried_sync = false;
                 }
             }
-            if (absolute_time_diff_us(base_at, get_absolute_time()) >  30LL * MICS_IN_SEC && !tried_sync){
+            if (absolute_time_diff_us(base_at, get_absolute_time()) >  1800LL * MICS_IN_SEC && !tried_sync){
                 if (run_ntp_once(&out_time)){
                     printf("time synced\n");
                     base_time = out_time;

@@ -6,6 +6,8 @@
 #ifndef NTP_H
 #define  NTP_H
 #include <pico/time.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -21,7 +23,9 @@ typedef struct NTP_T_ {
     async_at_time_worker_t request_worker;
     async_at_time_worker_t resend_worker;
     time_t* out;
+    bool retried;
     bool done;
+    bool failed;
 } NTP_T;
 
 #define NTP_SERVER "pool.ntp.org"
@@ -39,10 +43,15 @@ static void ntp_result(NTP_T* state, int status, time_t *result) {
         /*printf("got ntp response: %02d/%02d/%04d %02d:%02d:%02d\n", utc->tm_mday, utc->tm_mon + 1, utc->tm_year + 1900,
               utc->tm_hour, utc->tm_min, utc->tm_sec, ut);*/
         state->done = true;
-    } else {
+    } else if (!state->retried) {
         async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
-        //hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(),  &state->request_worker, NTP_TEST_TIME_MS)); // repeat the request in future
+        hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(),  &state->request_worker, NTP_TEST_TIME_MS)); // repeat the request in future
         printf("Failed to get time, retry in %ds\n", NTP_TEST_TIME_MS / 1000);
+        state->retried = true;
+    } else {
+        printf("Failed to get time after retry, giving up\n");
+        async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
+        state->failed = true;
     }
 }
 
@@ -136,6 +145,8 @@ static NTP_T* ntp_init(time_t* out) {
     state->resend_worker.do_work = resend_worker_fn;
     state->resend_worker.user_data = state;
     state->out = out;
+    state->done = false;
+    state->retried = false;
     return state;
 }
 
@@ -172,7 +183,7 @@ bool run_ntp_once(time_t* out) {
     if (!state) return false;
 
     hard_assert(async_context_add_at_time_worker_in_ms(cyw43_arch_async_context(), &state->request_worker, 0));
-    while (!state->done) sleep_ms(100);
+    while (!state->done && !state->failed) sleep_ms(100);
 
     async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->request_worker);
     async_context_remove_at_time_worker(cyw43_arch_async_context(), &state->resend_worker);
